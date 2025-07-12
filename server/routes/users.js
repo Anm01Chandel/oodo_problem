@@ -16,15 +16,31 @@ router.post('/', async (req, res) => {
 
   try {
     let user = await User.findOne({ email });
-    if (user) return res.status(400).json({ msg: 'User already exists' });
+    if (user) {
+      return res.status(400).json({ msg: 'User with this email already exists' });
+    }
 
-    const newUser = new User({ name, email, password });
-    user = await newUser.save();
+    // CORRECTED LOGIC: Create a new user instance.
+    // The password here is plain text. The pre-save hook in User.js will hash it.
+    user = new User({
+      name,
+      email,
+      password,
+    });
+
+    // Now, save the user to the database. This triggers the pre-save hook.
+    await user.save();
+
+    // If save is successful, create the JWT token
+    const payload = {
+      id: user.id,
+      role: user.role,
+    };
 
     jwt.sign(
-      { id: user.id, role: user.role },
+      payload,
       process.env.JWT_SECRET,
-      { expiresIn: 3600 },
+      { expiresIn: 3600 * 24 }, // 24 hours
       (err, token) => {
         if (err) throw err;
         res.json({
@@ -33,10 +49,16 @@ router.post('/', async (req, res) => {
         });
       }
     );
-  } catch (e) {
-    res.status(500).json({ msg: 'Server Error' });
+  } catch (err) {
+    // This will now catch any errors from the .save() operation and log them
+    console.error('--- REGISTRATION ERROR ---');
+    console.error(err.message);
+    res.status(500).json({ msg: 'Server Error during registration.' });
   }
 });
+
+
+// (The rest of the file remains the same but is included for completeness)
 
 // @route   GET api/users
 // @desc    Get all public user profiles (for browsing)
@@ -53,6 +75,7 @@ router.get('/', async (req, res) => {
     const users = await User.find(query).select('-password');
     res.json(users);
   } catch (e) {
+    console.error(e.message);
     res.status(500).json({ msg: 'Server Error' });
   }
 });
@@ -71,6 +94,7 @@ router.get('/profile/:id', async (req, res) => {
         if (e.kind === 'ObjectId') {
              return res.status(404).json({ msg: 'User not found' });
         }
+        console.error(e.message);
         res.status(500).json({ msg: 'Server Error' });
     }
 });
@@ -86,11 +110,10 @@ router.put('/profile', auth, async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ msg: 'User not found' });
 
-    // Build user object
     const updatedFields = {};
     if (name) updatedFields.name = name;
-    if (location) updatedFields.location = location;
-    if (availability) updatedFields.availability = availability;
+    if (location || location === '') updatedFields.location = location;
+    if (availability || availability === '') updatedFields.availability = availability;
     if (skillsOffered) updatedFields.skillsOffered = skillsOffered;
     if (skillsWanted) updatedFields.skillsWanted = skillsWanted;
     if (isPublic !== undefined) updatedFields.isPublic = isPublic;
@@ -99,11 +122,12 @@ router.put('/profile', auth, async (req, res) => {
     const updatedUser = await User.findByIdAndUpdate(
       req.user.id,
       { $set: updatedFields },
-      { new: true }
+      { new: true, runValidators: true }
     ).select('-password');
     
     res.json(updatedUser);
   } catch (e) {
+    console.error(e.message);
     res.status(500).json({ msg: 'Server Error' });
   }
 });

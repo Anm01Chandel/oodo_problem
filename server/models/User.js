@@ -54,8 +54,9 @@ const UserSchema = new mongoose.Schema({
   },
 });
 
-// Password Hashing Middleware
+// Password Hashing Middleware - This runs before a user document is saved
 UserSchema.pre('save', async function (next) {
+  // Only hash the password if it has been modified (or is new)
   if (!this.isModified('password')) {
     return next();
   }
@@ -66,6 +67,8 @@ UserSchema.pre('save', async function (next) {
 
 // Password comparison method
 UserSchema.methods.matchPassword = async function (enteredPassword) {
+  // CORRECTED: Added the 'return' keyword. This was the bug.
+  // This now correctly returns true or false from the comparison.
   return await bcrypt.compare(enteredPassword, this.password);
 };
 

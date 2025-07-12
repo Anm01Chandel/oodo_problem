@@ -23,20 +23,24 @@ const authReducer = (state, action) => {
       };
     case 'REGISTER_SUCCESS':
     case 'LOGIN_SUCCESS':
+      // 1. Set token in localStorage
       localStorage.setItem('token', action.payload.token);
+      // 2. CRITICAL FIX: Immediately apply the token to axios headers for future requests
       setAuthToken(action.payload.token);
+      // 3. Update the state
       return {
         ...state,
         ...action.payload,
         isAuthenticated: true,
         loading: false,
+        error: null, // Clear previous errors
       };
     case 'AUTH_ERROR':
     case 'LOGIN_FAIL':
     case 'LOGOUT':
     case 'REGISTER_FAIL':
       localStorage.removeItem('token');
-      setAuthToken(null);
+      setAuthToken(null); // Remove the header
       return {
         ...state,
         token: null,
@@ -53,10 +57,11 @@ const authReducer = (state, action) => {
 export const AuthProvider = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  // Load user on mount
+  // This function now primarily handles loading the user on initial page load/refresh
   const loadUser = async () => {
-    if (localStorage.token) {
-      setAuthToken(localStorage.token);
+    const token = localStorage.getItem('token');
+    if (token) {
+      setAuthToken(token);
     }
     try {
       const res = await axios.get(`${process.env.REACT_APP_API_URL}/api/auth/user`);
@@ -66,21 +71,10 @@ export const AuthProvider = ({ children }) => {
     }
   };
   
+  // Load user once on app start
   useEffect(() => {
     loadUser();
   }, []);
-
-  // Login User
-  const login = async (formData) => {
-    const config = { headers: { 'Content-Type': 'application/json' } };
-    try {
-      const res = await axios.post(`${process.env.REACT_APP_API_URL}/api/auth`, formData, config);
-      dispatch({ type: 'LOGIN_SUCCESS', payload: res.data });
-      loadUser();
-    } catch (err) {
-      dispatch({ type: 'LOGIN_FAIL', payload: err.response.data.msg });
-    }
-  };
 
   // Register User
   const register = async (formData) => {
@@ -88,9 +82,19 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await axios.post(`${process.env.REACT_APP_API_URL}/api/users`, formData, config);
       dispatch({ type: 'REGISTER_SUCCESS', payload: res.data });
-      loadUser();
     } catch (err) {
       dispatch({ type: 'REGISTER_FAIL', payload: err.response.data.msg });
+    }
+  };
+  
+  // Login User
+  const login = async (formData) => {
+    const config = { headers: { 'Content-Type': 'application/json' } };
+    try {
+      const res = await axios.post(`${process.env.REACT_APP_API_URL}/api/auth`, formData, config);
+      dispatch({ type: 'LOGIN_SUCCESS', payload: res.data });
+    } catch (err) {
+      dispatch({ type: 'LOGIN_FAIL', payload: err.response.data.msg });
     }
   };
 
@@ -100,11 +104,7 @@ export const AuthProvider = ({ children }) => {
   return (
     <AuthContext.Provider
       value={{
-        token: state.token,
-        isAuthenticated: state.isAuthenticated,
-        loading: state.loading,
-        user: state.user,
-        error: state.error,
+        ...state,
         register,
         login,
         logout,

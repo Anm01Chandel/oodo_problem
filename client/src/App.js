@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast'; // Import Toaster
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -26,6 +27,15 @@ function App() {
   return (
     <AuthProvider>
       <Router>
+        <Toaster // Add the Toaster component here
+          position="top-right"
+          toastOptions={{
+            style: {
+              background: '#3a3a3a',
+              color: '#f0f0f0',
+            },
+          }}
+        />
         <Navbar />
         <div className="container">
           <Routes>
@@ -34,11 +44,9 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/profile/:id" element={<Profile />} />
             
-            {/* Private Routes */}
             <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
             <Route path="/requests" element={<PrivateRoute><SwapRequests /></PrivateRoute>} />
             
-            {/* Admin Routes */}
             <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
             <Route path="/admin/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
             <Route path="/admin/swaps" element={<AdminRoute><SwapManagement /></AdminRoute>} />

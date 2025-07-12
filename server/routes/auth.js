@@ -17,16 +17,28 @@ router.post('/', async (req, res) => {
 
   try {
     const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ msg: 'Invalid credentials' });
-    if (user.isBanned) return res.status(403).json({ msg: 'This account has been banned.' });
+    if (!user) {
+      return res.status(400).json({ msg: 'Invalid credentials' });
+    }
+    
+    if (user.isBanned) {
+      return res.status(403).json({ msg: 'This account has been banned.' });
+    }
 
     const isMatch = await user.matchPassword(password);
-    if (!isMatch) return res.status(400).json({ msg: 'Invalid credentials' });
+    if (!isMatch) {
+      return res.status(400).json({ msg: 'Invalid credentials' });
+    }
+
+    const payload = {
+      id: user.id,
+      role: user.role
+    };
 
     jwt.sign(
-      { id: user.id, role: user.role },
+      payload,
       process.env.JWT_SECRET,
-      { expiresIn: 3600 },
+      { expiresIn: 3600 * 24 }, // 24 hours
       (err, token) => {
         if (err) throw err;
         res.json({
@@ -41,7 +53,9 @@ router.post('/', async (req, res) => {
         });
       }
     );
-  } catch (e) {
+  } catch (err) {
+    console.error('--- LOGIN ERROR ---');
+    console.error(err.message);
     res.status(500).json({ msg: 'Server Error' });
   }
 });
@@ -53,7 +67,8 @@ router.get('/user', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('-password');
     res.json(user);
-  } catch (e) {
+  } catch (err) {
+    console.error(err.message);
     res.status(500).json({ msg: 'Server Error' });
   }
 });

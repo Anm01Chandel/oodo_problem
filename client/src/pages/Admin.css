@@ -1,0 +1,98 @@
+.admin-container {
+    padding: 1rem 0;
+}
+
+.admin-container h1 {
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.admin-container p {
+    text-align: center;
+    color: var(--text-muted);
+    margin-bottom: 2rem;
+}
+
+/* Dashboard Grid */
+.admin-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.admin-card {
+    background: var(--medium-bg);
+    padding: 2rem;
+    border-radius: var(--border-radius);
+    text-align: center;
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.admin-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 15px rgba(0, 170, 255, 0.2);
+}
+
+.admin-card h2 {
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+}
+
+.admin-card p {
+    color: var(--text-muted);
+}
+
+.report-buttons {
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+
+/* Admin Table */
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 2rem;
+    background: var(--medium-bg);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+}
+
+.admin-table th, .admin-table td {
+    padding: 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--light-bg);
+}
+
+.admin-table thead {
+    background: var(--light-bg);
+    color: var(--primary-color);
+}
+
+.admin-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.admin-table tbody tr:hover {
+    background-color: #3f3f3f;
+}
+
+.status-banned { color: var(--danger-color); font-weight: bold; }
+.status-active { color: var(--success-color); font-weight: bold; }
+
+/* Status badges for table view */
+.status-badge-table {
+    padding: 0.3rem 0.6rem;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    text-transform: capitalize;
+    color: #fff;
+}
+.status-pending { background-color: var(--warning-color); color: #333; }
+.status-accepted { background-color: var(--success-color); }
+.status-rejected { background-color: var(--danger-color); }
+.status-cancelled { background-color: var(--text-muted); }
+.status-completed { background-color: var(--primary-color); }

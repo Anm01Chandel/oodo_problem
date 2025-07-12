@@ -8,136 +8,147 @@ const User = require('../models/User');
 // @desc    Create a new swap request
 // @access  Private
 router.post('/', auth, async (req, res) => {
-  const { requesteeId, skillOffered, skillWanted, message } = req.body;
-
-  if (!skillOffered || !skillWanted) {
-    return res.status(400).json({ msg: 'Please select both a skill to offer and a skill you want.' });
-  }
-
+  const { requestedId, skillOffered, skillWanted, message } = req.body;
+  
   try {
-    const requester = await User.findById(req.user.id);
-    const requestee = await User.findById(requesteeId);
-
-    if (!requestee) {
-      return res.status(404).json({ msg: 'User to swap with not found' });
-    }
+    const requestedUser = await User.findById(requestedId);
+    if (!requestedUser) return res.status(404).json({ msg: 'Requested user not found' });
 
     const newSwap = new Swap({
       requester: req.user.id,
-      requestee: requesteeId,
-      skillOffered,
-      skillWanted,
-      message,
+      requested: requestedId,
+      skillOfferedByRequester: skillOffered,
+      skillWantedByRequester: skillWanted,
+      requesterMessage: message,
     });
 
     const swap = await newSwap.save();
     res.json(swap);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
+  } catch (e) {
+    res.status(500).json({ msg: 'Server Error' });
   }
 });
 
-// @route   GET api/swaps/me
-// @desc    Get all swaps involving the current user
+// @route   GET api/swaps
+// @desc    Get all swaps for the logged-in user
 // @access  Private
-router.get('/me', auth, async (req, res) => {
+router.get('/', auth, async (req, res) => {
   try {
     const swaps = await Swap.find({
-      $or: [{ requester: req.user.id }, { requestee: req.user.id }],
+      $or: [{ requester: req.user.id }, { requested: req.user.id }],
     })
-    .populate('requester', ['name', 'profilePhoto'])
-    .populate('requestee', ['name', 'profilePhoto'])
-    .sort({ date: -1 });
+    .populate('requester', 'name avatar')
+    .populate('requested', 'name avatar')
+    .sort({ createdAt: -1 });
 
     res.json(swaps);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
+  } catch (e) {
+    res.status(500).json({ msg: 'Server Error' });
   }
 });
 
 // @route   PUT api/swaps/:id
-// @desc    Update swap status (accept, reject, cancel, complete)
+// @desc    Update a swap status (accept/reject)
 // @access  Private
 router.put('/:id', auth, async (req, res) => {
-  const { status } = req.body;
-  try {
-    let swap = await Swap.findById(req.params.id);
-    if (!swap) return res.status(404).json({ msg: 'Swap not found' });
+    const { status } = req.body; // should be 'accepted' or 'rejected'
 
-    const isRequestee = swap.requestee.toString() === req.user.id;
-    const isRequester = swap.requester.toString() === req.user.id;
-    if (!isRequestee && !isRequester) return res.status(401).json({ msg: 'User not authorized' });
-    
-    if (status === 'accepted' || status === 'rejected') {
-        if (!isRequestee) return res.status(401).json({ msg: 'Only the requestee can accept or reject' });
-    } else if (status === 'cancelled') {
-        if (!isRequester || swap.status !== 'pending') return res.status(401).json({ msg: 'Only the requester can cancel a pending request' });
-    } else if (status === 'completed') {
-        if (swap.status !== 'accepted') return res.status(400).json({ msg: 'Only accepted swaps can be marked as completed' });
-    } else {
+    if (!['accepted', 'rejected'].includes(status)) {
         return res.status(400).json({ msg: 'Invalid status update' });
     }
-    
-    swap = await Swap.findByIdAndUpdate(req.params.id, { $set: { status } }, { new: true });
-    res.json(swap);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
-  }
+
+    try {
+        let swap = await Swap.findById(req.params.id);
+        if (!swap) return res.status(404).json({ msg: 'Swap not found' });
+
+        // Only the requested user can accept/reject
+        if (swap.requested.toString() !== req.user.id) {
+            return res.status(401).json({ msg: 'User not authorized' });
+        }
+        
+        if (swap.status !== 'pending') {
+            return res.status(400).json({ msg: `Cannot change status of a swap that is already ${swap.status}`})
+        }
+
+        swap.status = status;
+        await swap.save();
+        res.json(swap);
+    } catch (e) {
+        res.status(500).json({ msg: 'Server Error' });
+    }
 });
 
-// @route   POST api/swaps/:id/rate
-// @desc    Rate the other user in a completed swap
+
+// @route   DELETE api/swaps/:id
+// @desc    Cancel a pending swap request
 // @access  Private
-router.post('/:id/rate', auth, async (req, res) => {
-  const { rating, feedback } = req.body;
+router.delete('/:id', auth, async (req, res) => {
+    try {
+        let swap = await Swap.findById(req.params.id);
+        if (!swap) return res.status(404).json({ msg: 'Swap not found' });
 
-  if (!rating || rating < 1 || rating > 5) {
-    return res.status(400).json({ msg: 'Please provide a rating between 1 and 5.' });
-  }
+        // Only the requester can cancel a PENDING swap
+        if (swap.requester.toString() !== req.user.id) {
+            return res.status(401).json({ msg: 'User not authorized' });
+        }
+        if (swap.status !== 'pending') {
+            return res.status(400).json({ msg: 'Only pending swaps can be cancelled.'})
+        }
 
-  try {
-    const swap = await Swap.findById(req.params.id);
-    if (!swap) return res.status(404).json({ msg: 'Swap not found.' });
-    if (swap.status !== 'completed') return res.status(400).json({ msg: 'Can only rate completed swaps.' });
-
-    const isRequester = swap.requester.toString() === req.user.id;
-    const isRequestee = swap.requestee.toString() === req.user.id;
-
-    if (!isRequester && !isRequestee) {
-      return res.status(401).json({ msg: 'You were not a part of this swap.' });
+        // We can either delete it or set status to 'cancelled'
+        // Let's set status to 'cancelled' for record-keeping
+        swap.status = 'cancelled';
+        await swap.save();
+        
+        res.json({ msg: 'Swap cancelled successfully' });
+    } catch (e) {
+        if(e.kind === 'ObjectId') return res.status(404).json({ msg: 'Swap not found' });
+        res.status(500).json({ msg: 'Server Error' });
     }
-    
-    let userToRateId;
-    let fieldToUpdate;
+});
 
-    if (isRequester) {
-      if (swap.requesterHasRated) return res.status(400).json({ msg: 'You have already rated this swap.' });
-      userToRateId = swap.requestee;
-      fieldToUpdate = { requesterHasRated: true };
-    } else { // isRequestee
-      if (swap.requesteeHasRated) return res.status(400).json({ msg: 'You have already rated this swap.' });
-      userToRateId = swap.requester;
-      fieldToUpdate = { requesteeHasRated: true };
+
+// @route   POST api/swaps/feedback/:id
+// @desc    Add feedback to a completed swap
+// @access  Private
+router.post('/feedback/:id', auth, async (req, res) => {
+    const { rating, feedback } = req.body;
+
+    try {
+        let swap = await Swap.findById(req.params.id);
+        if (!swap) return res.status(404).json({ msg: 'Swap not found' });
+
+        if (swap.status !== 'accepted') { // Can only give feedback on accepted swaps
+             return res.status(400).json({ msg: 'Can only provide feedback on accepted swaps.' });
+        }
+
+        const isRequester = swap.requester.toString() === req.user.id;
+        const isRequested = swap.requested.toString() === req.user.id;
+
+        if (!isRequester && !isRequested) {
+            return res.status(401).json({ msg: 'Not a participant of this swap.' });
+        }
+
+        if(isRequester) {
+            swap.requesterRating = rating;
+            swap.requesterFeedback = feedback;
+        }
+
+        if(isRequested) {
+            swap.requestedRating = rating;
+            swap.requestedFeedback = feedback;
+        }
+
+        // If both parties have given feedback, mark as completed.
+        if(swap.requesterRating && swap.requestedRating) {
+            swap.status = 'completed';
+        }
+
+        await swap.save();
+        res.json(swap);
+    } catch (e) {
+        res.status(500).json({ msg: 'Server Error' });
     }
-
-    const userToRate = await User.findById(userToRateId);
-    userToRate.ratings.unshift({
-      user: req.user.id,
-      rating: Number(rating),
-      feedback,
-    });
-    await userToRate.save();
-
-    await Swap.findByIdAndUpdate(req.params.id, { $set: fieldToUpdate });
-
-    res.json({ msg: 'Rating submitted successfully.' });
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
-  }
 });
 
 module.exports = router;

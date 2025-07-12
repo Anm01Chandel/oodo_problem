@@ -1,58 +1,50 @@
-import React, { useState } from 'react';
-import axios from 'axios';
+import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import AuthContext from '../context/AuthContext';
+import './Form.css';
 
 const Login = () => {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-  });
-  const navigate = useNavigate();
+    const authContext = useContext(AuthContext);
+    const { login, error, isAuthenticated } = authContext;
+    const navigate = useNavigate();
 
-  const { email, password } = formData;
+    useEffect(() => {
+        if (isAuthenticated) {
+            navigate('/');
+        }
+    }, [isAuthenticated, navigate]);
 
-  const onChange = (e) =>
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const [user, setUser] = useState({
+        email: '',
+        password: '',
+    });
 
-  const onSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const res = await axios.post('http://localhost:5000/api/auth/login', {
-        email,
-        password,
-      });
-      localStorage.setItem('token', res.data.token);
-      navigate('/'); // Redirect to home
-      window.location.reload();
-    } catch (err) {
-      console.error(err.response.data);
-    }
-  };
+    const { email, password } = user;
 
-  return (
-    <div>
-      <h2>Login</h2>
-      <form onSubmit={onSubmit}>
-        <input
-          type="email"
-          placeholder="Email Address"
-          name="email"
-          value={email}
-          onChange={onChange}
-          required
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          name="password"
-          value={password}
-          onChange={onChange}
-          required
-        />
-        <input type="submit" value="Login" />
-      </form>
-    </div>
-  );
+    const onChange = e => setUser({ ...user, [e.target.name]: e.target.value });
+
+    const onSubmit = e => {
+        e.preventDefault();
+        login({ email, password });
+    };
+
+    return (
+        <div className="form-container">
+            <h1>Account <span className="text-primary">Login</span></h1>
+            <form onSubmit={onSubmit}>
+                <div className="form-group">
+                    <label htmlFor="email">Email Address</label>
+                    <input type="email" name="email" value={email} onChange={onChange} required />
+                </div>
+                <div className="form-group">
+                    <label htmlFor="password">Password</label>
+                    <input type="password" name="password" value={password} onChange={onChange} required />
+                </div>
+                <input type="submit" value="Login" className="btn btn-primary btn-block" />
+            </form>
+            {error && <p className="error-msg">{error}</p>}
+        </div>
+    );
 };
 
 export default Login;

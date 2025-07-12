@@ -1,89 +1,110 @@
 const express = require('express');
 const router = express.Router();
+const jwt = require('jsonwebtoken');
 const auth = require('../middleware/auth');
 const User = require('../models/User');
 
+// @route   POST api/users
+// @desc    Register new user
+// @access  Public
+router.post('/', async (req, res) => {
+  const { name, email, password } = req.body;
+
+  if (!name || !email || !password) {
+    return res.status(400).json({ msg: 'Please enter all fields' });
+  }
+
+  try {
+    let user = await User.findOne({ email });
+    if (user) return res.status(400).json({ msg: 'User already exists' });
+
+    const newUser = new User({ name, email, password });
+    user = await newUser.save();
+
+    jwt.sign(
+      { id: user.id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: 3600 },
+      (err, token) => {
+        if (err) throw err;
+        res.json({
+          token,
+          user: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: user.avatar },
+        });
+      }
+    );
+  } catch (e) {
+    res.status(500).json({ msg: 'Server Error' });
+  }
+});
+
 // @route   GET api/users
-// @desc    Get all public user profiles (for browsing/searching)
+// @desc    Get all public user profiles (for browsing)
 // @access  Public
 router.get('/', async (req, res) => {
   try {
     const { skill } = req.query;
-    const query = { isPublic: true };
+    let query = { isPublic: true, isBanned: false, role: 'user' };
 
     if (skill) {
-      query.$or = [
-        { skillsOffered: { $regex: skill, $options: 'i' } },
-        { skillsWanted: { $regex: skill, $options: 'i' } }
-      ];
+      query.skillsOffered = { $regex: skill, $options: 'i' };
     }
 
     const users = await User.find(query).select('-password');
     res.json(users);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
+  } catch (e) {
+    res.status(500).json({ msg: 'Server Error' });
   }
 });
 
-// @route   GET api/users/:id
-// @desc    Get user profile by ID
+// @route   GET api/users/profile/:id
+// @desc    Get a user's profile by ID
 // @access  Public
-router.get('/:id', async (req, res) => {
+router.get('/profile/:id', async (req, res) => {
     try {
-        const user = await User.findById(req.params.id)
-            .select('-password')
-            .populate('ratings.user', ['name']); // This line is updated
-
-        if (!user) {
-            return res.status(404).json({ msg: 'User not found' });
-        }
-        if (!user.isPublic) {
-            // For a real app, you might want to check if the requester is the user themselves
-            return res.status(403).json({ msg: 'This profile is private' });
+        const user = await User.findById(req.params.id).select('-password');
+        if (!user || (!user.isPublic && user.role !== 'admin')) {
+            return res.status(404).json({ msg: 'User not found or profile is private' });
         }
         res.json(user);
-    } catch (err) {
-        console.error(err.message);
-        if(err.kind === 'ObjectId') {
-            return res.status(404).json({ msg: 'User not found' });
+    } catch (e) {
+        if (e.kind === 'ObjectId') {
+             return res.status(404).json({ msg: 'User not found' });
         }
-        res.status(500).send('Server Error');
+        res.status(500).json({ msg: 'Server Error' });
     }
 });
 
 
-// @route   PUT api/users/me
-// @desc    Update logged-in user's profile
+// @route   PUT api/users/profile
+// @desc    Update user profile
 // @access  Private
-router.put('/me', auth, async (req, res) => {
-  const { name, location, skillsOffered, skillsWanted, availability, isPublic } = req.body;
+router.put('/profile', auth, async (req, res) => {
+  const { name, location, availability, skillsOffered, skillsWanted, isPublic, avatar } = req.body;
   
-  const profileFields = {};
-  if (name) profileFields.name = name;
-  if (location !== undefined) profileFields.location = location;
-  if (skillsOffered) profileFields.skillsOffered = skillsOffered;
-  if (skillsWanted) profileFields.skillsWanted = skillsWanted;
-  if (availability) profileFields.availability = availability;
-  if (isPublic !== undefined) profileFields.isPublic = isPublic;
-
   try {
-    let user = await User.findById(req.user.id);
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ msg: 'User not found' });
 
-    if (!user) {
-      return res.status(404).json({ msg: 'User not found' });
-    }
+    // Build user object
+    const updatedFields = {};
+    if (name) updatedFields.name = name;
+    if (location) updatedFields.location = location;
+    if (availability) updatedFields.availability = availability;
+    if (skillsOffered) updatedFields.skillsOffered = skillsOffered;
+    if (skillsWanted) updatedFields.skillsWanted = skillsWanted;
+    if (isPublic !== undefined) updatedFields.isPublic = isPublic;
+    if (avatar) updatedFields.avatar = avatar;
 
-    user = await User.findByIdAndUpdate(
+    const updatedUser = await User.findByIdAndUpdate(
       req.user.id,
-      { $set: profileFields },
+      { $set: updatedFields },
       { new: true }
     ).select('-password');
-
-    res.json(user);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
+    
+    res.json(updatedUser);
+  } catch (e) {
+    res.status(500).json({ msg: 'Server Error' });
   }
 });
 

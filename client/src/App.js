@@ -5,26 +5,48 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Profile from './pages/Profile';
-import SwapRequests from './pages/SwapRequests'; // Import the new page
+import SwapRequests from './pages/SwapRequests';
+import AdminDashboard from './pages/AdminDashboard';
+import UserManagement from './pages/UserManagement';
+import SwapManagement from './pages/SwapManagement';
+
+import AdminRoute from './components/routing/AdminRoute';
+import PrivateRoute from './components/routing/PrivateRoute';
+
+import { AuthProvider } from './context/AuthContext';
+import setAuthToken from './utils/setAuthToken';
+
 import './App.css';
+
+if (localStorage.token) {
+  setAuthToken(localStorage.token);
+}
 
 function App() {
   return (
-    <Router>
-      <div className="App">
+    <AuthProvider>
+      <Router>
         <Navbar />
-        <main className="container" style={{padding: '1rem'}}>
+        <div className="container">
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/register" element={<Register />} />
-            <Route path="/login"element={<Login />} />
+            <Route path="/login" element={<Login />} />
             <Route path="/profile/:id" element={<Profile />} />
-            <Route path="/profile" element={<Profile />} /> 
-            <Route path="/swaps" element={<SwapRequests />} /> {/* Add the new route */}
+            
+            {/* Private Routes */}
+            <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
+            <Route path="/requests" element={<PrivateRoute><SwapRequests /></PrivateRoute>} />
+            
+            {/* Admin Routes */}
+            <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+            <Route path="/admin/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
+            <Route path="/admin/swaps" element={<AdminRoute><SwapManagement /></AdminRoute>} />
+            
           </Routes>
-        </main>
-      </div>
-    </Router>
+        </div>
+      </Router>
+    </AuthProvider>
   );
 }
 

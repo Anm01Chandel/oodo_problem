@@ -12,7 +12,6 @@ router.get('/', async (req, res) => {
     const query = { isPublic: true };
 
     if (skill) {
-      // Search by skill offered or wanted
       query.$or = [
         { skillsOffered: { $regex: skill, $options: 'i' } },
         { skillsWanted: { $regex: skill, $options: 'i' } }
@@ -32,16 +31,23 @@ router.get('/', async (req, res) => {
 // @access  Public
 router.get('/:id', async (req, res) => {
     try {
-        const user = await User.findById(req.params.id).select('-password');
+        const user = await User.findById(req.params.id)
+            .select('-password')
+            .populate('ratings.user', ['name']); // This line is updated
+
         if (!user) {
             return res.status(404).json({ msg: 'User not found' });
         }
         if (!user.isPublic) {
+            // For a real app, you might want to check if the requester is the user themselves
             return res.status(403).json({ msg: 'This profile is private' });
         }
         res.json(user);
     } catch (err) {
         console.error(err.message);
+        if(err.kind === 'ObjectId') {
+            return res.status(404).json({ msg: 'User not found' });
+        }
         res.status(500).send('Server Error');
     }
 });
@@ -55,7 +61,7 @@ router.put('/me', auth, async (req, res) => {
   
   const profileFields = {};
   if (name) profileFields.name = name;
-  if (location) profileFields.location = location;
+  if (location !== undefined) profileFields.location = location;
   if (skillsOffered) profileFields.skillsOffered = skillsOffered;
   if (skillsWanted) profileFields.skillsWanted = skillsWanted;
   if (availability) profileFields.availability = availability;

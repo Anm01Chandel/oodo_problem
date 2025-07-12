@@ -24,6 +24,14 @@ const SwapSchema = new mongoose.Schema({
     enum: ['pending', 'accepted', 'rejected', 'completed', 'cancelled'],
     default: 'pending',
   },
+  requesterHasRated: {
+    type: Boolean,
+    default: false,
+  },
+  requesteeHasRated: {
+    type: Boolean,
+    default: false,
+  },
   message: {
     type: String,
   },

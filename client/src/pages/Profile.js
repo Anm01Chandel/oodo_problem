@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
 
-// A simple modal component for the swap request form
 const SwapRequestForm = ({ loggedInUser, profileUser, onCancel, onSubmit }) => {
     const [offerSkill, setOfferSkill] = useState(loggedInUser.skillsOffered[0] || '');
     const [wantSkill, setWantSkill] = useState(profileUser.skillsOffered[0] || '');
@@ -59,19 +58,29 @@ const Profile = () => {
 
     useEffect(() => {
         const fetchInitialData = async () => {
-            if (!token) {
-                if (id) {
-                    try { const res = await axios.get(`http://localhost:5000/api/users/${id}`); setProfile(res.data); } catch (err) { console.error('Error fetching profile:', err); }
-                } else { navigate('/login'); }
+            if (!token && !id) {
+                navigate('/login');
                 return;
             }
+
             try {
-                const userRes = await axios.get('http://localhost:5000/api/auth', createAuthHeaders());
-                setLoggedInUser(userRes.data);
-                const profileUrl = id ? `http://localhost:5000/api/users/${id}` : 'http://localhost:5000/api/auth';
-                const profileRes = await axios.get(profileUrl, createAuthHeaders());
-                setProfile(profileRes.data);
-            } catch (err) { console.error("Error fetching data", err); localStorage.removeItem('token'); navigate('/login'); }
+                if (token) {
+                    const userRes = await axios.get('http://localhost:5000/api/auth', createAuthHeaders());
+                    setLoggedInUser(userRes.data);
+                }
+
+                const profileId = id || (token && (await axios.get('http://localhost:5000/api/auth', createAuthHeaders())).data._id);
+                if (profileId) {
+                    const profileRes = await axios.get(`http://localhost:5000/api/users/${profileId}`, token ? createAuthHeaders() : {});
+                    setProfile(profileRes.data);
+                }
+            } catch (err) {
+                console.error("Error fetching data", err);
+                if (err.response && err.response.status === 401) {
+                  localStorage.removeItem('token');
+                  navigate('/login');
+                }
+            }
         };
         fetchInitialData();
     }, [id, token, navigate]);
@@ -109,26 +118,27 @@ const Profile = () => {
     }
 
     const isOwnProfile = loggedInUser && loggedInUser._id === profile._id;
-    
-    const canRequestSwap = loggedInUser && 
-                           loggedInUser.skillsOffered.length > 0 &&
-                           profile.skillsOffered.length > 0;
+    const canRequestSwap = loggedInUser && loggedInUser.skillsOffered.length > 0 && profile.skillsOffered.length > 0;
+
+    const averageRating = profile.ratings.length > 0
+        ? (profile.ratings.reduce((acc, item) => acc + item.rating, 0) / profile.ratings.length).toFixed(1)
+        : 'No ratings yet';
 
     return (
         <div style={{ padding: '2rem' }}>
             {isRequestingSwap && <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 99 }} onClick={() => setIsRequestingSwap(false)}></div>}
             {isRequestingSwap && loggedInUser && <SwapRequestForm loggedInUser={loggedInUser} profileUser={profile} onCancel={() => setIsRequestingSwap(false)} onSubmit={handleSwapSubmit} />}
 
-            <h2>User Profile</h2>
             {isEditMode && isOwnProfile ? (
                 <form onSubmit={handleSave} style={{ maxWidth: '500px', margin: 'auto', textAlign: 'left' }}>
+                    <h2>Edit Profile</h2>
                     <div style={{ marginBottom: '1rem' }}>
                         <label>Name:</label>
                         <input type="text" name="name" value={profile.name} onChange={handleInputChange} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} />
                     </div>
                     <div style={{ marginBottom: '1rem' }}>
                         <label>Location:</label>
-                        <input type="text" name="location" value={profile.location} onChange={handleInputChange} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} />
+                        <input type="text" name="location" value={profile.location || ''} onChange={handleInputChange} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} />
                     </div>
                     <div style={{ marginBottom: '1rem' }}>
                         <label>Availability:</label>
@@ -153,26 +163,42 @@ const Profile = () => {
                     <button type="button" onClick={() => setIsEditMode(false)} style={{ marginLeft: '10px' }}>Cancel</button>
                 </form>
             ) : (
-                <div style={{ maxWidth: '500px', margin: 'auto', textAlign: 'left', lineHeight: '1.6' }}>
-                    <p><strong>Name:</strong> {profile.name}</p>
-                    <p><strong>Location:</strong> {profile.location || 'Not specified'}</p>
-                    <p><strong>Availability:</strong> {profile.availability || 'Not specified'}</p>
-                    <p><strong>Skills Offered:</strong> {profile.skillsOffered.length > 0 ? profile.skillsOffered.join(', ') : 'None specified'}</p>
-                    <p><strong>Skills Wanted:</strong> {profile.skillsWanted.length > 0 ? profile.skillsWanted.join(', ') : 'None specified'}</p>
-                    <p><strong>Profile Status:</strong> {profile.isPublic ? 'Public' : 'Private'}</p>
+                <div style={{ maxWidth: '600px', margin: 'auto' }}>
+                    <div style={{ textAlign: 'left', lineHeight: '1.6' }}>
+                        <h2>
+                            {profile.name} - <span title="Average Rating">⭐ {averageRating}</span>
+                        </h2>
+                        <p><strong>Location:</strong> {profile.location || 'Not specified'}</p>
+                        <p><strong>Availability:</strong> {profile.availability || 'Not specified'}</p>
+                        <p><strong>Skills Offered:</strong> {profile.skillsOffered.length > 0 ? profile.skillsOffered.join(', ') : 'None specified'}</p>
+                        <p><strong>Skills Wanted:</strong> {profile.skillsWanted.length > 0 ? profile.skillsWanted.join(', ') : 'None specified'}</p>
+                        <p><strong>Profile Status:</strong> {profile.isPublic ? 'Public' : 'Private'}</p>
+                        {isOwnProfile && <button onClick={() => setIsEditMode(true)}>Edit Profile</button>}
+                        {!isOwnProfile && loggedInUser && (
+                            <button onClick={() => setIsRequestingSwap(true)} disabled={!canRequestSwap} style={{ marginTop: '1rem' }}>
+                                Request Swap
+                            </button>
+                        )}
+                        {!isOwnProfile && loggedInUser && !canRequestSwap && (
+                            <p style={{color: 'grey', fontSize: '0.9em', marginTop: '1rem' }}>
+                                *You or this user must add skills to your profiles to request a swap.
+                            </p>
+                        )}
+                    </div>
 
-                    {isOwnProfile && <button onClick={() => setIsEditMode(true)}>Edit Profile</button>}
-                    
-                    {!isOwnProfile && loggedInUser && (
-                        <button onClick={() => setIsRequestingSwap(true)} disabled={!canRequestSwap} style={{ marginTop: '1rem' }}>
-                            Request Swap
-                        </button>
-                    )}
-                    {!isOwnProfile && loggedInUser && !canRequestSwap && (
-                        <p style={{color: 'grey', fontSize: '0.9em', marginTop: '1rem' }}>
-                            *You or this user must add skills to your profiles to request a swap.
-                        </p>
-                    )}
+                    <div style={{ marginTop: '3rem', textAlign: 'left' }}>
+                        <h3>Feedback History</h3>
+                        {profile.ratings.length > 0 ? (
+                            profile.ratings.map((r) => (
+                                <div key={r._id} style={{ border: '1px solid #eee', padding: '1rem', marginBottom: '1rem', borderRadius: '5px' }}>
+                                    <p><strong>Rating: {r.rating}/5</strong> - from {r.user ? r.user.name : 'A user'}</p>
+                                    {r.feedback && <p>"{r.feedback}"</p>}
+                                </div>
+                            ))
+                        ) : (
+                            <p>No feedback has been left for this user yet.</p>
+                        )}
+                    </div>
                 </div>
             )}
         </div>

@@ -21,7 +21,7 @@ const UserSchema = new mongoose.Schema({
   },
   profilePhoto: {
     type: String,
-    default: '', // URL to the photo
+    default: '',
   },
   skillsOffered: [{
     type: String,
@@ -31,11 +31,20 @@ const UserSchema = new mongoose.Schema({
   }],
   availability: {
     type: String,
-    default: 'Not specified', // e.g., "Weekends", "Evenings"
+    default: 'Not specified',
   },
   isPublic: {
     type: Boolean,
     default: true,
+  },
+  role: {
+    type: String,
+    enum: ['user', 'admin'],
+    default: 'user'
+  },
+  isBanned: {
+    type: Boolean,
+    default: false
   },
   ratings: [{
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

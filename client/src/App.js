@@ -5,7 +5,11 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Profile from './pages/Profile';
-import SwapRequests from './pages/SwapRequests'; // Import the new page
+import SwapRequests from './pages/SwapRequests';
+import AdminRoute from './components/routing/AdminRoute';
+import AdminDashboard from './pages/AdminDashboard';
+import UserManagement from './pages/UserManagement';
+
 import './App.css';
 
 function App() {
@@ -15,12 +19,22 @@ function App() {
         <Navbar />
         <main className="container" style={{padding: '1rem'}}>
           <Routes>
+            {/* Public Routes */}
             <Route path="/" element={<Home />} />
             <Route path="/register" element={<Register />} />
             <Route path="/login"element={<Login />} />
+            
+            {/* Private User Routes */}
             <Route path="/profile/:id" element={<Profile />} />
             <Route path="/profile" element={<Profile />} /> 
-            <Route path="/swaps" element={<SwapRequests />} /> {/* Add the new route */}
+            <Route path="/swaps" element={<SwapRequests />} />
+
+            {/* Admin Routes */}
+            <Route path="/admin" element={<AdminRoute />}>
+              <Route path="" element={<AdminDashboard />} />
+              <Route path="users" element={<UserManagement />} />
+            </Route>
+
           </Routes>
         </main>
       </div>

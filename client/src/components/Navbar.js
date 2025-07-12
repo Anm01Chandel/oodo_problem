@@ -1,65 +1,68 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
 const Navbar = () => {
-  const navigate = useNavigate();
-  const token = localStorage.getItem('token');
+    const navigate = useNavigate();
+    const [user, setUser] = useState(null);
+    const token = localStorage.getItem('token');
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    navigate('/login');
-    window.location.reload();
-  };
-  
-  // Define a style for the links
-  const linkStyle = { color: 'white', textDecoration: 'none' };
+    useEffect(() => {
+        const fetchUser = async () => {
+            if (token) {
+                try {
+                    const res = await axios.get('http://localhost:5000/api/auth', {
+                        headers: { 'x-auth-token': token }
+                    });
+                    setUser(res.data);
+                } catch (err) {
+                    // Handle invalid token
+                    localStorage.removeItem('token');
+                    setUser(null);
+                }
+            }
+        };
+        fetchUser();
+    }, [token]);
 
-  const authLinks = (
-    <>
-      <li><Link to="/" style={linkStyle}>Browse Skills</Link></li>
-      <li><Link to="/swaps" style={linkStyle}>Swap Requests</Link></li>
-      <li><Link to="/profile" style={linkStyle}>My Profile</Link></li>
-      <li><a href="#!" onClick={handleLogout} style={{...linkStyle, cursor: 'pointer'}}>Logout</a></li>
-    </>
-  );
+    const handleLogout = () => {
+        localStorage.removeItem('token');
+        setUser(null);
+        navigate('/login');
+    };
 
-  const guestLinks = (
-    <>
-      <li><Link to="/register" style={linkStyle}>Register</Link></li>
-      <li><Link to="/login" style={linkStyle}>Login</Link></li>
-    </>
-  );
+    const linkStyle = { color: 'white', textDecoration: 'none' };
+    const liStyle = { margin: '0 1rem' };
+    const ulStyle = { display: 'flex', listStyle: 'none', margin: 0, padding: 0 };
+    const navStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 2rem', background: '#333', color: 'white' };
 
-  const navStyle = {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '1rem 2rem',
-    background: '#333',
-    color: 'white',
-    flexWrap: 'wrap'
-  };
+    const authLinks = (
+        <>
+            {user && user.role === 'admin' && (
+                <li style={liStyle}><Link to="/admin" style={linkStyle}>Admin</Link></li>
+            )}
+            <li style={liStyle}><Link to="/" style={linkStyle}>Browse</Link></li>
+            <li style={liStyle}><Link to="/swaps" style={linkStyle}>Swaps</Link></li>
+            <li style={liStyle}><Link to="/profile" style={linkStyle}>Profile</Link></li>
+            <li style={liStyle}><a href="#!" onClick={handleLogout} style={{ ...linkStyle, cursor: 'pointer' }}>Logout</a></li>
+        </>
+    );
 
-  const ulStyle = {
-    display: 'flex',
-    listStyle: 'none',
-    margin: 0,
-    padding: 0
-  };
+    const guestLinks = (
+        <>
+            <li style={liStyle}><Link to="/register" style={linkStyle}>Register</Link></li>
+            <li style={liStyle}><Link to="/login" style={linkStyle}>Login</Link></li>
+        </>
+    );
 
-  const liStyle = {
-    margin: '0 1rem'
-  };
-
-  return (
-    <nav style={navStyle}>
-      <h1><Link to="/" style={linkStyle}>Skill Swap</Link></h1>
-      <ul style={ulStyle}>
-        {token ? React.Children.map(authLinks.props.children, child => <li style={liStyle}>{child}</li>) 
-               : React.Children.map(guestLinks.props.children, child => <li style={liStyle}>{child}</li>)}
-      </ul>
-    </nav>
-  );
+    return (
+        <nav style={navStyle}>
+            <h1><Link to="/" style={linkStyle}>Skill Swap</Link></h1>
+            <ul style={ulStyle}>
+                {token ? authLinks : guestLinks}
+            </ul>
+        </nav>
+    );
 };
 
 export default Navbar;

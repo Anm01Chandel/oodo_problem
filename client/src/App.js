@@ -9,6 +9,7 @@ import SwapRequests from './pages/SwapRequests';
 import AdminRoute from './components/routing/AdminRoute';
 import AdminDashboard from './pages/AdminDashboard';
 import UserManagement from './pages/UserManagement';
+import SwapManagement from './pages/SwapManagement';
 
 import './App.css';
 
@@ -22,7 +23,7 @@ function App() {
             {/* Public Routes */}
             <Route path="/" element={<Home />} />
             <Route path="/register" element={<Register />} />
-            <Route path="/login"element={<Login />} />
+            <Route path="/login" element={<Login />} />
             
             {/* Private User Routes */}
             <Route path="/profile/:id" element={<Profile />} />
@@ -33,6 +34,7 @@ function App() {
             <Route path="/admin" element={<AdminRoute />}>
               <Route path="" element={<AdminDashboard />} />
               <Route path="users" element={<UserManagement />} />
+              <Route path="swaps" element={<SwapManagement />} />
             </Route>
 
           </Routes>

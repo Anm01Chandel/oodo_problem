@@ -10,6 +10,11 @@ const User = require('../models/User');
 router.post('/', auth, async (req, res) => {
   const { requesteeId, skillOffered, skillWanted, message } = req.body;
 
+  // Validation: Ensure both skills are provided before proceeding.
+  if (!skillOffered || !skillWanted) {
+    return res.status(400).json({ msg: 'Please select both a skill to offer and a skill you want.' });
+  }
+
   try {
     const requester = await User.findById(req.user.id);
     const requestee = await User.findById(requesteeId);
@@ -78,11 +83,10 @@ router.put('/:id', auth, async (req, res) => {
     if (status === 'accepted' || status === 'rejected') {
         if (!isRequestee) return res.status(401).json({ msg: 'Only the requestee can accept or reject' });
     } else if (status === 'cancelled') {
-        if (!isRequester) return res.status(401).json({ msg: 'Only the requester can cancel' });
+        if (!isRequester || swap.status !== 'pending') return res.status(401).json({ msg: 'Only the requester can cancel a pending request' });
     } else {
         return res.status(400).json({ msg: 'Invalid status update' });
     }
-
 
     swap = await Swap.findByIdAndUpdate(
       req.params.id,

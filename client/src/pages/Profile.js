@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
 
-// SwapRequestForm component remains the same
+// A simple modal component for the swap request form
 const SwapRequestForm = ({ loggedInUser, profileUser, onCancel, onSubmit }) => {
     const [offerSkill, setOfferSkill] = useState(loggedInUser.skillsOffered[0] || '');
     const [wantSkill, setWantSkill] = useState(profileUser.skillsOffered[0] || '');
@@ -57,7 +57,6 @@ const Profile = () => {
 
     const createAuthHeaders = () => ({ headers: { 'x-auth-token': token } });
 
-    // The useEffect hook for fetching data remains the same
     useEffect(() => {
         const fetchInitialData = async () => {
             if (!token) {
@@ -82,13 +81,23 @@ const Profile = () => {
         try {
             const res = await axios.put('http://localhost:5000/api/users/me', profile, createAuthHeaders());
             setProfile(res.data);
-            setIsEditMode(false); // Exit edit mode on successful save
+            setIsEditMode(false);
         } catch (err) { console.error('Error updating profile:', err); }
     };
 
-    const handleSwapSubmit = async (swapData) => { /* This function is unchanged */ };
+    const handleSwapSubmit = async (swapData) => {
+        try {
+            await axios.post('http://localhost:5000/api/swaps', swapData, createAuthHeaders());
+            alert('Swap request sent successfully!');
+            setIsRequestingSwap(false);
+            navigate('/swaps');
+        } catch (err) {
+            const errorMsg = err.response ? err.response.data.msg : 'An unknown error occurred.';
+            console.error('Error sending swap request:', errorMsg);
+            alert(`Error: ${errorMsg}`);
+        }
+    };
     
-    // These handlers now correctly link to the full edit form
     const handleInputChange = (e) => setProfile({ ...profile, [e.target.name]: e.target.value });
     const handleSkillsChange = (e, type) => {
         const skillsArray = e.target.value.split(',').map(s => s.trim()).filter(s => s !== "");
@@ -100,56 +109,70 @@ const Profile = () => {
     }
 
     const isOwnProfile = loggedInUser && loggedInUser._id === profile._id;
+    
+    const canRequestSwap = loggedInUser && 
+                           loggedInUser.skillsOffered.length > 0 &&
+                           profile.skillsOffered.length > 0;
 
     return (
-        <div>
+        <div style={{ padding: '2rem' }}>
             {isRequestingSwap && <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 99 }} onClick={() => setIsRequestingSwap(false)}></div>}
             {isRequestingSwap && loggedInUser && <SwapRequestForm loggedInUser={loggedInUser} profileUser={profile} onCancel={() => setIsRequestingSwap(false)} onSubmit={handleSwapSubmit} />}
 
             <h2>User Profile</h2>
             {isEditMode && isOwnProfile ? (
-                //  ======= THIS IS THE FULL, WORKING EDIT FORM =======
                 <form onSubmit={handleSave} style={{ maxWidth: '500px', margin: 'auto', textAlign: 'left' }}>
                     <div style={{ marginBottom: '1rem' }}>
                         <label>Name:</label>
-                        <input type="text" name="name" value={profile.name} onChange={handleInputChange} style={{ width: '100%', padding: '8px' }} />
+                        <input type="text" name="name" value={profile.name} onChange={handleInputChange} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} />
                     </div>
                     <div style={{ marginBottom: '1rem' }}>
                         <label>Location:</label>
-                        <input type="text" name="location" value={profile.location} onChange={handleInputChange} style={{ width: '100%', padding: '8px' }} />
+                        <input type="text" name="location" value={profile.location} onChange={handleInputChange} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} />
                     </div>
                     <div style={{ marginBottom: '1rem' }}>
                         <label>Availability:</label>
-                        <input type="text" name="availability" value={profile.availability} onChange={handleInputChange} style={{ width: '100%', padding: '8px' }} />
+                        <input type="text" name="availability" value={profile.availability} onChange={handleInputChange} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} />
                     </div>
                     <div style={{ marginBottom: '1rem' }}>
                         <label>Skills Offered (comma-separated):</label>
-                        <input type="text" name="skillsOffered" defaultValue={profile.skillsOffered.join(', ')} onChange={(e) => handleSkillsChange(e, 'skillsOffered')} style={{ width: '100%', padding: '8px' }} />
+                        <input type="text" name="skillsOffered" defaultValue={profile.skillsOffered.join(', ')} onChange={(e) => handleSkillsChange(e, 'skillsOffered')} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} />
                     </div>
                     <div style={{ marginBottom: '1rem' }}>
                         <label>Skills Wanted (comma-separated):</label>
-                        <input type="text" name="skillsWanted" defaultValue={profile.skillsWanted.join(', ')} onChange={(e) => handleSkillsChange(e, 'skillsWanted')} style={{ width: '100%', padding: '8px' }} />
+                        <input type="text" name="skillsWanted" defaultValue={profile.skillsWanted.join(', ')} onChange={(e) => handleSkillsChange(e, 'skillsWanted')} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} />
                     </div>
                     <div style={{ marginBottom: '1rem' }}>
                         <label>Profile Privacy:</label>
-                        <select name="isPublic" value={profile.isPublic} onChange={handleInputChange} style={{ width: '100%', padding: '8px' }}>
-                            <option value={true}>Public</option>
-                            <option value={false}>Private</option>
+                        <select name="isPublic" value={profile.isPublic.toString()} onChange={handleInputChange} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}>
+                            <option value="true">Public</option>
+                            <option value="false">Private</option>
                         </select>
                     </div>
                     <button type="submit">Save Changes</button>
                     <button type="button" onClick={() => setIsEditMode(false)} style={{ marginLeft: '10px' }}>Cancel</button>
                 </form>
             ) : (
-                // ======= THIS IS THE VIEW MODE (UNCHANGED) =======
-                <div>
+                <div style={{ maxWidth: '500px', margin: 'auto', textAlign: 'left', lineHeight: '1.6' }}>
                     <p><strong>Name:</strong> {profile.name}</p>
                     <p><strong>Location:</strong> {profile.location || 'Not specified'}</p>
+                    <p><strong>Availability:</strong> {profile.availability || 'Not specified'}</p>
                     <p><strong>Skills Offered:</strong> {profile.skillsOffered.length > 0 ? profile.skillsOffered.join(', ') : 'None specified'}</p>
                     <p><strong>Skills Wanted:</strong> {profile.skillsWanted.length > 0 ? profile.skillsWanted.join(', ') : 'None specified'}</p>
+                    <p><strong>Profile Status:</strong> {profile.isPublic ? 'Public' : 'Private'}</p>
 
                     {isOwnProfile && <button onClick={() => setIsEditMode(true)}>Edit Profile</button>}
-                    {!isOwnProfile && loggedInUser && <button onClick={() => setIsRequestingSwap(true)}>Request Swap</button>}
+                    
+                    {!isOwnProfile && loggedInUser && (
+                        <button onClick={() => setIsRequestingSwap(true)} disabled={!canRequestSwap} style={{ marginTop: '1rem' }}>
+                            Request Swap
+                        </button>
+                    )}
+                    {!isOwnProfile && loggedInUser && !canRequestSwap && (
+                        <p style={{color: 'grey', fontSize: '0.9em', marginTop: '1rem' }}>
+                            *You or this user must add skills to your profiles to request a swap.
+                        </p>
+                    )}
                 </div>
             )}
         </div>

@@ -1,134 +1,111 @@
 const express = require('express');
 const router = express.Router();
+const jwt = require('jsonwebtoken');
 const auth = require('../middleware/auth');
 const User = require('../models/User');
-const multer = require('multer'); // Import multer
-const path = require('path'); // Import path
 
-// ===== START: MULTER CONFIGURATION =====
-// Set up storage engine
-const storage = multer.diskStorage({
-  destination: './uploads/',
-  filename: function(req, file, cb) {
-    // We use the user's ID to ensure a unique filename, and Date.now() to prevent caching issues
-    cb(null, req.user.id + '-' + Date.now() + path.extname(file.originalname));
+// @route   POST api/users
+// @desc    Register new user
+// @access  Public
+router.post('/', async (req, res) => {
+  const { name, email, password } = req.body;
+
+  if (!name || !email || !password) {
+    return res.status(400).json({ msg: 'Please enter all fields' });
+  }
+
+  try {
+    let user = await User.findOne({ email });
+    if (user) return res.status(400).json({ msg: 'User already exists' });
+
+    const newUser = new User({ name, email, password });
+    user = await newUser.save();
+
+    jwt.sign(
+      { id: user.id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: 3600 },
+      (err, token) => {
+        if (err) throw err;
+        res.json({
+          token,
+          user: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: user.avatar },
+        });
+      }
+    );
+  } catch (e) {
+    res.status(500).json({ msg: 'Server Error' });
   }
 });
 
-// Check File Type
-function checkFileType(file, cb) {
-  // Allowed extensions
-  const filetypes = /jpeg|jpg|png|gif/;
-  // Check ext
-  const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
-  // Check mime type
-  const mimetype = filetypes.test(file.mimetype);
-
-  if (mimetype && extname) {
-    return cb(null, true);
-  } else {
-    cb('Error: Images Only!');
-  }
-}
-
-// Init upload
-const upload = multer({
-  storage: storage,
-  limits: { fileSize: 1000000 }, // Limit file size to 1MB
-  fileFilter: function(req, file, cb) {
-    checkFileType(file, cb);
-  }
-}).single('profilePhoto'); // 'profilePhoto' must match the name attribute in the frontend form
-// ===== END: MULTER CONFIGURATION =====
-
-// GET api/users (unchanged)
+// @route   GET api/users
+// @desc    Get all public user profiles (for browsing)
+// @access  Public
 router.get('/', async (req, res) => {
   try {
     const { skill } = req.query;
-    const query = { isPublic: true };
+    let query = { isPublic: true, isBanned: false, role: 'user' };
+
     if (skill) {
-      query.$or = [
-        { skillsOffered: { $regex: skill, $options: 'i' } },
-        { skillsWanted: { $regex: skill, $options: 'i' } }
-      ];
+      query.skillsOffered = { $regex: skill, $options: 'i' };
     }
+
     const users = await User.find(query).select('-password');
     res.json(users);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
+  } catch (e) {
+    res.status(500).json({ msg: 'Server Error' });
   }
 });
 
-// GET api/users/:id (unchanged)
-router.get('/:id', async (req, res) => {
+// @route   GET api/users/profile/:id
+// @desc    Get a user's profile by ID
+// @access  Public
+router.get('/profile/:id', async (req, res) => {
     try {
-        const user = await User.findById(req.params.id)
-            .select('-password')
-            .populate('ratings.user', ['name']);
-        if (!user) return res.status(404).json({ msg: 'User not found' });
-        if (!user.isPublic) return res.status(403).json({ msg: 'This profile is private' });
+        const user = await User.findById(req.params.id).select('-password');
+        if (!user || (!user.isPublic && user.role !== 'admin')) {
+            return res.status(404).json({ msg: 'User not found or profile is private' });
+        }
         res.json(user);
-    } catch (err) {
-        console.error(err.message);
-        if(err.kind === 'ObjectId') return res.status(404).json({ msg: 'User not found' });
-        res.status(500).send('Server Error');
+    } catch (e) {
+        if (e.kind === 'ObjectId') {
+             return res.status(404).json({ msg: 'User not found' });
+        }
+        res.status(500).json({ msg: 'Server Error' });
     }
 });
 
-// PUT api/users/me (unchanged)
-router.put('/me', auth, async (req, res) => {
-  const { name, location, skillsOffered, skillsWanted, availability, isPublic } = req.body;
-  const profileFields = {};
-  if (name) profileFields.name = name;
-  if (location !== undefined) profileFields.location = location;
-  if (skillsOffered) profileFields.skillsOffered = skillsOffered;
-  if (skillsWanted) profileFields.skillsWanted = skillsWanted;
-  if (availability) profileFields.availability = availability;
-  if (isPublic !== undefined) profileFields.isPublic = isPublic;
+
+// @route   PUT api/users/profile
+// @desc    Update user profile
+// @access  Private
+router.put('/profile', auth, async (req, res) => {
+  const { name, location, availability, skillsOffered, skillsWanted, isPublic, avatar } = req.body;
+  
   try {
-    let user = await User.findByIdAndUpdate(
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ msg: 'User not found' });
+
+    // Build user object
+    const updatedFields = {};
+    if (name) updatedFields.name = name;
+    if (location) updatedFields.location = location;
+    if (availability) updatedFields.availability = availability;
+    if (skillsOffered) updatedFields.skillsOffered = skillsOffered;
+    if (skillsWanted) updatedFields.skillsWanted = skillsWanted;
+    if (isPublic !== undefined) updatedFields.isPublic = isPublic;
+    if (avatar) updatedFields.avatar = avatar;
+
+    const updatedUser = await User.findByIdAndUpdate(
       req.user.id,
-      { $set: profileFields },
+      { $set: updatedFields },
       { new: true }
     ).select('-password');
-    res.json(user);
-} catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
+    
+    res.json(updatedUser);
+  } catch (e) {
+    res.status(500).json({ msg: 'Server Error' });
   }
 });
-
-// ===== START: NEW PHOTO UPLOAD ROUTE =====
-// @route   POST api/users/me/photo
-// @desc    Upload a profile photo
-// @access  Private
-router.post('/me/photo', auth, (req, res) => {
-  upload(req, res, async (err) => {
-    if (err) {
-      return res.status(400).json({ msg: err });
-    }
-    if (req.file == undefined) {
-      return res.status(400).json({ msg: 'Error: No File Selected!' });
-    }
-    
-    try {
-      // The file path will be something like 'uploads/userid-12345.jpg'
-      const photoUrl = `/uploads/${req.file.filename}`;
-      
-      const user = await User.findByIdAndUpdate(
-        req.user.id,
-        { $set: { profilePhoto: photoUrl } },
-        { new: true }
-      ).select('-password');
-
-      res.json(user);
-    } catch (err) {
-      console.error(err.message);
-      res.status(500).send('Server Error');
-    }
-  });
-});
-// ===== END: NEW PHOTO UPLOAD ROUTE =====
 
 module.exports = router;

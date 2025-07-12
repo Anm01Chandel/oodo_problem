@@ -1,319 +1,169 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import AuthContext from '../context/AuthContext';
 import AvatarSelectionModal from '../components/AvatarSelectionModal';
-
-const SwapRequestForm = ({ loggedInUser, profileUser, onCancel, onSubmit }) => {
-    const [offerSkill, setOfferSkill] = useState(loggedInUser.skillsOffered[0] || '');
-    const [wantSkill, setWantSkill] = useState(profileUser.skillsOffered[0] || '');
-    const [message, setMessage] = useState('');
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        onSubmit({
-            requesteeId: profileUser._id,
-            skillOffered: offerSkill,
-            skillWanted: wantSkill,
-            message,
-        });
-    };
-
-    return (
-        <div style={{
-            position: 'fixed',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            backgroundColor: 'white',
-            padding: '2rem',
-            borderRadius: '8px',
-            boxShadow: '0 5px 15px rgba(0,0,0,0.3)',
-            zIndex: 100,
-            width: '400px'
-        }}>
-            <h3>Request a Swap with {profileUser.name}</h3>
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <label>Skill You Offer:</label>
-                <select value={offerSkill} onChange={(e) => setOfferSkill(e.target.value)}>
-                    {loggedInUser.skillsOffered.map((skill, i) => (
-                        <option key={i} value={skill}>{skill}</option>
-                    ))}
-                </select>
-
-                <label>Skill You Want:</label>
-                <select value={wantSkill} onChange={(e) => setWantSkill(e.target.value)}>
-                    {profileUser.skillsOffered.map((skill, i) => (
-                        <option key={i} value={skill}>{skill}</option>
-                    ))}
-                </select>
-
-                <label>Message:</label>
-                <textarea value={message} onChange={(e) => setMessage(e.target.value)} />
-
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <button type="submit">Send</button>
-                    <button type="button" onClick={onCancel}>Cancel</button>
-                </div>
-            </form>
-        </div>
-    );
-};
+import './Profile.css';
 
 const Profile = () => {
-    const [profile, setProfile] = useState(null);
-    const [loggedInUser, setLoggedInUser] = useState(null);
-    const [isEditMode, setIsEditMode] = useState(false);
-    const [isRequestingSwap, setIsRequestingSwap] = useState(false);
-    const [selectedFile, setSelectedFile] = useState(null);
-    const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
-
     const { id } = useParams();
     const navigate = useNavigate();
-    const token = localStorage.getItem('token');
-    const serverUrl = 'http://localhost:5000';
+    const { user: authUser, loadUser } = useContext(AuthContext);
 
-    const createAuthHeaders = () => ({ headers: { 'x-auth-token': token } });
+    const [profile, setProfile] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [isMyProfile, setIsMyProfile] = useState(false);
+    const [editMode, setEditMode] = useState(false);
+    const [formData, setFormData] = useState({
+        name: '', location: '', availability: '',
+        skillsOffered: '', skillsWanted: '', isPublic: true, avatar: ''
+    });
+    const [showAvatarModal, setShowAvatarModal] = useState(false);
 
     useEffect(() => {
-        const fetchInitialData = async () => {
-            if (!token && !id) {
-                navigate('/login');
-                return;
-            }
+        const profileId = id || 'me'; // If no ID, it's the auth user's profile
+        if (profileId === 'me' && !authUser) {
+             navigate('/login');
+             return;
+        }
+
+        const fetchProfile = async () => {
             try {
-                let currentUserId = null;
-                if (token) {
-                    const userRes = await axios.get(`${serverUrl}/api/auth`, createAuthHeaders());
-                    setLoggedInUser(userRes.data);
-                    currentUserId = userRes.data._id;
-                }
-                const profileId = id || currentUserId;
-                if (profileId) {
-                    const profileRes = await axios.get(`${serverUrl}/api/users/${profileId}`, token ? createAuthHeaders() : {});
-                    setProfile(profileRes.data);
-                }
+                const url = profileId === 'me'
+                    ? `${process.env.REACT_APP_API_URL}/api/auth/user`
+                    : `${process.env.REACT_APP_API_URL}/api/users/profile/${profileId}`;
+                
+                const res = await axios.get(url);
+                setProfile(res.data);
+                setIsMyProfile(authUser?._id === res.data._id);
+
+                // Populate form for editing
+                setFormData({
+                    name: res.data.name,
+                    location: res.data.location || '',
+                    availability: res.data.availability || '',
+                    skillsOffered: res.data.skillsOffered.join(', '),
+                    skillsWanted: res.data.skillsWanted.join(', '),
+                    isPublic: res.data.isPublic,
+                    avatar: res.data.avatar
+                });
+                
             } catch (err) {
-                console.error("Error fetching data", err);
-                if (err.response?.status === 401) {
-                    localStorage.removeItem('token');
-                    navigate('/login');
-                }
+                console.error(err);
+            } finally {
+                setLoading(false);
             }
         };
-        fetchInitialData();
-    }, [id, token, navigate]);
 
-    const handleSave = async (e) => {
+        fetchProfile();
+    }, [id, authUser, navigate]);
+
+    const onChange = e => {
+        const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+        setFormData({ ...formData, [e.target.name]: value });
+    };
+
+    const handleAvatarSelect = (avatarPath) => {
+        setFormData({ ...formData, avatar: avatarPath });
+        setShowAvatarModal(false);
+    };
+
+    const onSubmit = async e => {
         e.preventDefault();
+        const body = {
+            ...formData,
+            skillsOffered: formData.skillsOffered.split(',').map(s => s.trim()).filter(s => s),
+            skillsWanted: formData.skillsWanted.split(',').map(s => s.trim()).filter(s => s),
+        };
+
         try {
-            const res = await axios.put(`${serverUrl}/api/users/me`, profile, createAuthHeaders());
+            const res = await axios.put(`${process.env.REACT_APP_API_URL}/api/users/profile`, body);
             setProfile(res.data);
-            setIsEditMode(false);
+            setEditMode(false);
+            loadUser(); // Refresh auth context user
         } catch (err) {
-            console.error('Failed to save profile:', err);
-            alert('Failed to save profile');
+            console.error('Failed to update profile', err);
         }
     };
 
-    const handleSwapSubmit = async (swapData) => {
-        try {
-            await axios.post(`${serverUrl}/api/swaps`, swapData, createAuthHeaders());
-            alert('Swap request sent!');
-            setIsRequestingSwap(false);
-        } catch (err) {
-            console.error('Failed to send swap request:', err);
-            alert('Error sending swap request');
-        }
-    };
-
-    const handleInputChange = (e) => setProfile({ ...profile, [e.target.name]: e.target.value });
-
-    const handleSkillsChange = (e, type) => {
-        const updatedSkills = e.target.value.split(',').map(s => s.trim());
-        setProfile(prev => ({ ...prev, [type]: updatedSkills }));
-    };
-
-    const handleFileChange = (e) => setSelectedFile(e.target.files[0]);
-
-    const handlePhotoUpload = async (e) => {
-        e.preventDefault();
-        if (!selectedFile) return;
-        const formData = new FormData();
-        formData.append('photo', selectedFile);
-
-        try {
-            const res = await axios.post(`${serverUrl}/api/upload`, formData, createAuthHeaders());
-            const updatedUser = await axios.put(`${serverUrl}/api/users/me`, { profilePhoto: res.data.url }, createAuthHeaders());
-            setProfile(updatedUser.data);
-            alert('Photo updated!');
-        } catch (err) {
-            console.error('Error uploading photo:', err);
-            alert('Failed to upload photo');
-        }
-    };
-
-    const handleAvatarSelect = async (avatarUrl) => {
-        try {
-            const res = await axios.put(`${serverUrl}/api/users/me`, { profilePhoto: avatarUrl }, createAuthHeaders());
-            setProfile(res.data);
-            setIsAvatarModalOpen(false);
-            alert('Avatar updated!');
-        } catch (err) {
-            console.error('Error selecting avatar:', err);
-            alert('Failed to update avatar.');
-        }
-    };
-
-    if (!profile) return <div>Loading profile...</div>;
-
-    const isOwnProfile = loggedInUser && loggedInUser._id === profile._id;
-    const canRequestSwap = loggedInUser && loggedInUser.skillsOffered.length > 0 && profile.skillsOffered.length > 0;
-    const averageRating = profile.ratings.length > 0
-        ? (profile.ratings.reduce((acc, item) => acc + item.rating, 0) / profile.ratings.length).toFixed(1)
-        : 'No ratings yet';
-
-    let profileImageSrc = `https://ui-avatars.com/api/?name=${profile.name.replace(/\s/g, '+')}&background=random`;
-    if (profile.profilePhoto) {
-        profileImageSrc = profile.profilePhoto.startsWith('/uploads/')
-            ? `${serverUrl}${profile.profilePhoto}`
-            : profile.profilePhoto;
+    if (loading) return <div>Loading Profile...</div>;
+    if (!profile) return <div>Profile not found.</div>;
+    
+    // TODO: Create a SwapRequestModal component instead of this simple alert
+    const handleRequestSwap = () => {
+        alert(`Requesting a swap with ${profile.name}. Feature coming soon!`);
     }
 
+    const renderProfileView = () => (
+        <div className="profile-grid">
+            <div className="profile-left">
+                <img src={profile.avatar} alt="avatar" className="profile-avatar" />
+                <h2>{profile.name}</h2>
+                <p>{profile.location}</p>
+                {isMyProfile && <button onClick={() => setEditMode(true)} className="btn btn-primary">Edit Profile</button>}
+                {!isMyProfile && authUser && <button onClick={handleRequestSwap} className="btn btn-success">Request Swap</button>}
+            </div>
+            <div className="profile-right">
+                <h3>Availability</h3>
+                <p>{profile.availability || 'Not specified'}</p>
+                <hr />
+                <h3>Skills Offered</h3>
+                <div className="skills-list">
+                    {profile.skillsOffered.length > 0 ? profile.skillsOffered.map((s, i) => <span key={i} className="skill-tag">{s}</span>) : <p>None specified</p>}
+                </div>
+                <hr />
+                <h3>Skills Wanted</h3>
+                <div className="skills-list">
+                     {profile.skillsWanted.length > 0 ? profile.skillsWanted.map((s, i) => <span key={i} className="skill-tag-wanted">{s}</span>) : <p>None specified</p>}
+                </div>
+            </div>
+        </div>
+    );
+
+    const renderEditView = () => (
+         <div className="form-container">
+            <h2>Edit Profile</h2>
+            <form onSubmit={onSubmit}>
+                <div style={{textAlign: 'center', marginBottom: '1rem'}}>
+                    <img src={formData.avatar} alt="selected avatar" className="profile-avatar-edit" />
+                    <button type="button" onClick={() => setShowAvatarModal(true)} className="btn btn-light">Change Avatar</button>
+                </div>
+                <div className="form-group">
+                    <label>Name</label>
+                    <input type="text" name="name" value={formData.name} onChange={onChange} />
+                </div>
+                <div className="form-group">
+                    <label>Location</label>
+                    <input type="text" name="location" value={formData.location} onChange={onChange} />
+                </div>
+                <div className="form-group">
+                    <label>Availability</label>
+                    <input type="text" name="availability" placeholder="e.g., Weekends, Evenings" value={formData.availability} onChange={onChange} />
+                </div>
+                <div className="form-group">
+                    <label>Skills Offered (comma separated)</label>
+                    <textarea name="skillsOffered" value={formData.skillsOffered} onChange={onChange}></textarea>
+                </div>
+                <div className="form-group">
+                    <label>Skills Wanted (comma separated)</label>
+                    <textarea name="skillsWanted" value={formData.skillsWanted} onChange={onChange}></textarea>
+                </div>
+                <div className="form-group-inline">
+                    <label>Profile is Public</label>
+                    <input type="checkbox" name="isPublic" checked={formData.isPublic} onChange={onChange} />
+                </div>
+                <div className="edit-buttons">
+                    <button type="submit" className="btn btn-primary">Save Changes</button>
+                    <button type="button" onClick={() => setEditMode(false)} className="btn btn-light">Cancel</button>
+                </div>
+            </form>
+            {showAvatarModal && <AvatarSelectionModal onSelect={handleAvatarSelect} onClose={() => setShowAvatarModal(false)} />}
+        </div>
+    );
+
     return (
-        <div style={{ padding: '2rem' }}>
-            {/* Modal Backdrop for Swap */}
-            {isRequestingSwap && (
-                <div
-                    style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        width: '100vw',
-                        height: '100vh',
-                        backgroundColor: 'rgba(0,0,0,0.5)',
-                        zIndex: 50
-                    }}
-                    onClick={() => setIsRequestingSwap(false)}
-                />
-            )}
-
-            {isRequestingSwap && loggedInUser && (
-                <SwapRequestForm
-                    loggedInUser={loggedInUser}
-                    profileUser={profile}
-                    onCancel={() => setIsRequestingSwap(false)}
-                    onSubmit={handleSwapSubmit}
-                />
-            )}
-
-            {isAvatarModalOpen && (
-                <AvatarSelectionModal
-                    onSelect={handleAvatarSelect}
-                    onClose={() => setIsAvatarModalOpen(false)}
-                    currentAvatar={profile.profilePhoto}
-                />
-            )}
-
-            {isEditMode && isOwnProfile ? (
-                <div>
-                    {/* Avatar Preview */}
-                    <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
-                        <img
-                            src={profileImageSrc}
-                            alt="Avatar"
-                            style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover' }}
-                        />
-                    </div>
-
-                    {/* Edit Form */}
-                    <form onSubmit={handleSave} style={{
-                        maxWidth: '500px',
-                        margin: 'auto',
-                        padding: '2rem',
-                        border: '1px solid #ccc',
-                        borderRadius: '8px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '1rem'
-                    }}>
-                        <h2 style={{ textAlign: 'center' }}>Edit Profile Details</h2>
-
-                        <label>Name</label>
-                        <input
-                            type="text"
-                            name="name"
-                            value={profile.name}
-                            onChange={handleInputChange}
-                        />
-
-                        <label>About</label>
-                        <textarea
-                            name="about"
-                            value={profile.about}
-                            onChange={handleInputChange}
-                            rows="3"
-                        />
-
-                        <label>Skills Offered (comma-separated)</label>
-                        <input
-                            type="text"
-                            value={profile.skillsOffered.join(', ')}
-                            onChange={(e) => handleSkillsChange(e, 'skillsOffered')}
-                        />
-
-                        <label>Skills Wanted (comma-separated)</label>
-                        <input
-                            type="text"
-                            value={profile.skillsWanted.join(', ')}
-                            onChange={(e) => handleSkillsChange(e, 'skillsWanted')}
-                        />
-
-                        <button type="submit">Save Details</button>
-                    </form>
-
-                    {/* Avatar Section */}
-                    <div style={{
-                        maxWidth: '500px',
-                        margin: '2rem auto',
-                        padding: '2rem',
-                        border: '1px solid #ccc',
-                        borderRadius: '8px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '1rem'
-                    }}>
-                        <h3>Update Profile Photo</h3>
-
-                        <button onClick={() => setIsAvatarModalOpen(true)}>
-                            Choose from Avatar Library
-                        </button>
-
-                        <hr />
-
-                        <form onSubmit={handlePhotoUpload}>
-                            <h4>Or Upload Your Own Photo</h4>
-                            <input type="file" onChange={handleFileChange} />
-                            <button type="submit">Upload Photo</button>
-                        </form>
-                    </div>
-
-                    <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-                        <button onClick={() => setIsEditMode(false)}>Done Editing</button>
-                    </div>
-                </div>
-            ) : (
-                <div style={{ maxWidth: '600px', margin: 'auto', textAlign: 'center' }}>
-                    <img src={profileImageSrc} alt="Profile" style={{ width: '100px', borderRadius: '50%' }} />
-                    <h2>{profile.name}</h2>
-                    <p>{profile.about}</p>
-                    <p><strong>Average Rating:</strong> {averageRating}</p>
-                    <p><strong>Skills Offered:</strong> {profile.skillsOffered.join(', ')}</p>
-                    <p><strong>Skills Wanted:</strong> {profile.skillsWanted.join(', ')}</p>
-
-                    {isOwnProfile && <button onClick={() => setIsEditMode(true)}>Edit Profile</button>}
-                    {!isOwnProfile && canRequestSwap && <button onClick={() => setIsRequestingSwap(true)}>Request a Swap</button>}
-                </div>
-            )}
+        <div className="profile-container">
+            {editMode ? renderEditView() : renderProfileView()}
         </div>
     );
 };

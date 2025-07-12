@@ -6,16 +6,16 @@ const SwapSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
-  requestee: {
+  requested: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true,
   },
-  skillOffered: {
+  skillOfferedByRequester: {
     type: String,
     required: true,
   },
-  skillWanted: {
+  skillWantedByRequester: { // This is the skill from the 'requested' user's profile
     type: String,
     required: true,
   },
@@ -24,21 +24,15 @@ const SwapSchema = new mongoose.Schema({
     enum: ['pending', 'accepted', 'rejected', 'completed', 'cancelled'],
     default: 'pending',
   },
-  requesterHasRated: {
-    type: Boolean,
-    default: false,
-  },
-  requesteeHasRated: {
-    type: Boolean,
-    default: false,
-  },
-  message: {
+  requesterMessage: {
     type: String,
+    maxlength: 500,
   },
-  date: {
-    type: Date,
-    default: Date.now,
-  },
-});
+  // Feedback fields
+  requesterRating: { type: Number, min: 1, max: 5 },
+  requesterFeedback: { type: String },
+  requestedRating: { type: Number, min: 1, max: 5 },
+  requestedFeedback: { type: String },
+}, { timestamps: true });
 
 module.exports = mongoose.model('Swap', SwapSchema);

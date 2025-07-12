@@ -15,49 +15,46 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  role: {
+    type: String,
+    enum: ['user', 'admin'],
+    default: 'user',
+  },
   location: {
     type: String,
     default: '',
   },
-  profilePhoto: {
+  avatar: {
     type: String,
-    default: '',
+    default: '/avatars/avatar_1.png',
   },
-  skillsOffered: [{
-    type: String,
-  }],
-  skillsWanted: [{
-    type: String,
-  }],
+  skillsOffered: {
+    type: [String],
+    default: [],
+  },
+  skillsWanted: {
+    type: [String],
+    default: [],
+  },
   availability: {
     type: String,
-    default: 'Not specified',
+    default: '',
   },
   isPublic: {
     type: Boolean,
     default: true,
   },
-  role: {
-    type: String,
-    enum: ['user', 'admin'],
-    default: 'user'
-  },
   isBanned: {
     type: Boolean,
-    default: false
+    default: false,
   },
-  ratings: [{
-    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    rating: Number,
-    feedback: String,
-  }],
-  date: {
+  register_date: {
     type: Date,
     default: Date.now,
   },
 });
 
-// Hash password before saving
+// Password Hashing Middleware
 UserSchema.pre('save', async function (next) {
   if (!this.isModified('password')) {
     return next();
@@ -66,5 +63,11 @@ UserSchema.pre('save', async function (next) {
   this.password = await bcrypt.hash(this.password, salt);
   next();
 });
+
+// Password comparison method
+UserSchema.methods.matchPassword = async function (enteredPassword) {
+  return await bcrypt.compare(enteredPassword, this.password);
+};
+
 
 module.exports = mongoose.model('User', UserSchema);

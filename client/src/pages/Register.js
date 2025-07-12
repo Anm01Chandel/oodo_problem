@@ -1,70 +1,64 @@
-import React, { useState } from 'react';
-import axios from 'axios';
+import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import AuthContext from '../context/AuthContext';
+import './Form.css';
 
 const Register = () => {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
-  });
-  const navigate = useNavigate();
+    const authContext = useContext(AuthContext);
+    const { register, error, isAuthenticated } = authContext;
+    const navigate = useNavigate();
 
-  const { name, email, password } = formData;
+    useEffect(() => {
+        if (isAuthenticated) {
+            navigate('/');
+        }
+    }, [isAuthenticated, navigate]);
 
-  const onChange = (e) =>
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const [user, setUser] = useState({
+        name: '',
+        email: '',
+        password: '',
+        password2: ''
+    });
 
-  const onSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const res = await axios.post('http://localhost:5000/api/auth/register', {
-        name,
-        email,
-        password,
-      });
-      localStorage.setItem('token', res.data.token);
-      navigate('/'); // Redirect to home on successful registration
-      window.location.reload();
-    } catch (err) {
-      console.error(err.response.data);
-      // Here you would typically set an error message in the state to display to the user
-    }
-  };
+    const { name, email, password, password2 } = user;
 
-  return (
-    <div>
-      <h2>Register</h2>
-      <form onSubmit={onSubmit}>
-        <input
-          type="text"
-          placeholder="Name"
-          name="name"
-          value={name}
-          onChange={onChange}
-          required
-        />
-        <input
-          type="email"
-          placeholder="Email Address"
-          name="email"
-          value={email}
-          onChange={onChange}
-          required
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          name="password"
-          value={password}
-          onChange={onChange}
-          minLength="6"
-          required
-        />
-        <input type="submit" value="Register" />
-      </form>
-    </div>
-  );
+    const onChange = e => setUser({ ...user, [e.target.name]: e.target.value });
+
+    const onSubmit = e => {
+        e.preventDefault();
+        if (password !== password2) {
+            alert('Passwords do not match'); // Replace with better alert system
+        } else {
+            register({ name, email, password });
+        }
+    };
+
+    return (
+        <div className="form-container">
+            <h1>Account <span className="text-primary">Register</span></h1>
+            <form onSubmit={onSubmit}>
+                <div className="form-group">
+                    <label htmlFor="name">Name</label>
+                    <input type="text" name="name" value={name} onChange={onChange} required />
+                </div>
+                <div className="form-group">
+                    <label htmlFor="email">Email Address</label>
+                    <input type="email" name="email" value={email} onChange={onChange} required />
+                </div>
+                <div className="form-group">
+                    <label htmlFor="password">Password</label>
+                    <input type="password" name="password" value={password} onChange={onChange} required minLength="6" />
+                </div>
+                <div className="form-group">
+                    <label htmlFor="password2">Confirm Password</label>
+                    <input type="password" name="password2" value={password2} onChange={onChange} required minLength="6" />
+                </div>
+                <input type="submit" value="Register" className="btn btn-primary btn-block" />
+            </form>
+            {error && <p className="error-msg">{error}</p>}
+        </div>
+    );
 };
 
 export default Register;
